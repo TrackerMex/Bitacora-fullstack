@@ -6,6 +6,21 @@ import { AppModule } from './../src/app.module';
 import { GlobalExceptionFilter } from './../src/common/filters/global-exception.filter';
 import { TransformResponseInterceptor } from './../src/common/interceptors/transform-response.interceptor';
 
+interface HealthResponse {
+  success: boolean;
+  path: string;
+  timestamp: string;
+  data: {
+    status: string;
+    service: string;
+    database: {
+      provider: string;
+      orm: string;
+      connected: boolean;
+    };
+  };
+}
+
 describe('HealthController (e2e)', () => {
   let app: INestApplication<App>;
 
@@ -28,11 +43,15 @@ describe('HealthController (e2e)', () => {
     await app.init();
   });
 
+  afterEach(async () => {
+    await app.close();
+  });
+
   it('/api/health (GET)', () => {
     return request(app.getHttpServer())
       .get('/api/health')
       .expect(200)
-      .expect((res) => {
+      .expect((res: { body: HealthResponse }) => {
         expect(res.body.success).toBe(true);
         expect(res.body.data.status).toBe('ok');
       });

@@ -13,4 +13,8 @@ export const validationSchema = Joi.object({
   REDIS_URL: Joi.string()
     .uri({ scheme: ['redis'] })
     .optional(),
+  JWT_SECRET: Joi.string().min(32).required(),
+  JWT_ACCESS_EXPIRES_IN: Joi.string().default('15m'),
+  JWT_REFRESH_EXPIRES_IN: Joi.string().default('7d'),
+  CORS_ORIGIN: Joi.string().default('*'),
 });

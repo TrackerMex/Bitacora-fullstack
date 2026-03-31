@@ -13,4 +13,12 @@ export default () => ({
   redis: {
     url: process.env.REDIS_URL ?? 'redis://localhost:6379',
   },
+  jwt: {
+    secret: process.env.JWT_SECRET ?? 'change-this-secret-in-production',
+    accessTokenExpiresIn: process.env.JWT_ACCESS_EXPIRES_IN ?? '15m',
+    refreshTokenExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN ?? '7d',
+  },
+  cors: {
+    origin: process.env.CORS_ORIGIN ?? '*',
+  },
 });
