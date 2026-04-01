@@ -1,31 +1,16 @@
 import { Injectable } from '@nestjs/common';
-import { DatabaseService } from '../database/database.service';
+import { UserRepository } from './users.repository';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly databaseService: DatabaseService) {}
+  constructor(private readonly userRepository: UserRepository) {}
 
-  async findAll() {
-    const users = await this.databaseService.user.findMany({
-      orderBy: {
-        createdAt: 'desc',
-      },
-      include: {
-        roles: {
-          include: {
-            role: {
-              include: {
-                permissions: {
-                  include: {
-                    permission: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    });
+  /**
+   * Find all users for a specific tenant with their roles and permissions
+   * @param tenantId - The tenant ID to filter users by
+   */
+  async findAll(tenantId: string) {
+    const users = await this.userRepository.findAllWithRoles(tenantId);
 
     return {
       items: users.map((user) => ({
@@ -52,5 +37,31 @@ export class UsersService {
       total: users.length,
       module: 'users',
     };
+  }
+
+  /**
+   * Find a user by ID within a specific tenant
+   * @param tenantId - The tenant ID
+   * @param userId - The user ID
+   */
+  async findById(tenantId: string, userId: string) {
+    return this.userRepository.findById(tenantId, userId);
+  }
+
+  /**
+   * Find a user by email within a specific tenant
+   * @param tenantId - The tenant ID
+   * @param email - The user's email
+   */
+  async findByEmail(tenantId: string, email: string) {
+    return this.userRepository.findByEmail(tenantId, email);
+  }
+
+  /**
+   * Count users for a specific tenant
+   * @param tenantId - The tenant ID
+   */
+  async countUsers(tenantId: string) {
+    return this.userRepository.countUsers(tenantId);
   }
 }

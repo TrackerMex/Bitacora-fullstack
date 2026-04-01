@@ -1,20 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
+import { RoleRepository } from './roles.repository';
 
 @Injectable()
 export class RolesService {
-  constructor(private readonly databaseService: DatabaseService) {}
+  constructor(
+    private readonly databaseService: DatabaseService,
+    private readonly roleRepository: RoleRepository,
+  ) {}
 
-  async findAllRoles() {
-    const roles = await this.databaseService.role.findMany({
+  async findAllRoles(tenantId: string) {
+    const roles = await this.roleRepository.listRolesWithPermissions(tenantId, {
       orderBy: { createdAt: 'desc' },
-      include: {
-        permissions: {
-          include: {
-            permission: true,
-          },
-        },
-      },
     });
 
     return {
@@ -37,6 +34,10 @@ export class RolesService {
       total: roles.length,
       module: 'roles',
     };
+  }
+
+  async countRoles(tenantId: string) {
+    return this.roleRepository.countRoles(tenantId);
   }
 
   async findAllPermissions() {

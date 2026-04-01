@@ -6,6 +6,7 @@ import { DatabaseModule } from './database/database.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { TenantModule } from './tenancy/tenant.module';
+import { OnboardingModule } from './onboarding/onboarding.module';
 import { UsersModule } from './users/users.module';
 import { RolesModule } from './roles/roles.module';
 import { DispatchesModule } from './dispatches/dispatches.module';
@@ -26,6 +27,7 @@ import { IntegrationsModule } from './integrations/integrations.module';
     HealthModule,
     AuthModule,
     TenantModule,
+    OnboardingModule,
     UsersModule,
     RolesModule,
     DispatchesModule,

@@ -14,6 +14,9 @@ const prisma = new PrismaClient({
 const SALT_ROUNDS = 12;
 const DEFAULT_ADMIN_PASSWORD = 'admin123'; // Change in production!
 
+// ============================================
+// GLOBAL PERMISSIONS (Shared across all tenants)
+// ============================================
 const permissions = [
   {
     key: 'users.read',
@@ -77,11 +80,86 @@ const permissions = [
   },
 ];
 
-async function main() {
-  console.log('Seeding database...');
+// ============================================
+// TENANTS CONFIGURATION
+// ============================================
+const tenants = [
+  {
+    name: 'Acme Corporation',
+    slug: 'acme-corp',
+    email: 'contact@acme-corp.com',
+    adminUser: {
+      email: 'admin@acme.local',
+      name: 'Admin Acme',
+    },
+  },
+  {
+    name: 'TechCorp Solutions',
+    slug: 'techcorp',
+    email: 'contact@techcorp.com',
+    adminUser: {
+      email: 'admin@techcorp.local',
+      name: 'Admin TechCorp',
+    },
+  },
+  {
+    name: 'Logística XYZ',
+    slug: 'logistica-xyz',
+    email: 'contact@logistica-xyz.com',
+    adminUser: {
+      email: 'admin@logistica.local',
+      name: 'Admin Logística',
+    },
+  },
+];
 
-  // Seed permissions
-  console.log('Creating permissions...');
+// ============================================
+// ROLES CONFIGURATION (Per tenant)
+// ============================================
+const roleTemplates = [
+  {
+    key: 'admin',
+    name: 'Administrator',
+    description: 'Full access to the platform.',
+    permissions: [
+      'users.read',
+      'users.write',
+      'roles.read',
+      'roles.write',
+      'dispatches.read',
+      'dispatches.write',
+      'tracking.read',
+      'tracking.write',
+      'reports.read',
+      'reports.write',
+    ],
+  },
+  {
+    key: 'operator',
+    name: 'Operator',
+    description: 'Can manage dispatches and tracking.',
+    permissions: [
+      'dispatches.read',
+      'dispatches.write',
+      'tracking.read',
+      'tracking.write',
+    ],
+  },
+  {
+    key: 'viewer',
+    name: 'Viewer',
+    description: 'Read-only access to data.',
+    permissions: ['dispatches.read', 'tracking.read', 'reports.read'],
+  },
+];
+
+async function main() {
+  console.log('🌱 Starting Multi-Tenant Database Seeding...\n');
+
+  // ============================================
+  // STEP 1: Create Global Permissions
+  // ============================================
+  console.log('📋 Creating global permissions...');
   for (const permission of permissions) {
     await prisma.permission.upsert({
       where: { key: permission.key },
@@ -93,177 +171,156 @@ async function main() {
       create: permission,
     });
   }
-  console.log(`Created ${permissions.length} permissions`);
+  console.log(`✅ Created ${permissions.length} permissions\n`);
 
-  // Seed admin role
-  console.log('Creating admin role...');
-  const adminRole = await prisma.role.upsert({
-    where: { key: 'admin' },
-    update: {
-      name: 'Administrator',
-      description: 'Full access to the platform.',
-      isActive: true,
-    },
-    create: {
-      key: 'admin',
-      name: 'Administrator',
-      description: 'Full access to the platform.',
-      isActive: true,
-    },
-  });
-
-  // Create additional roles
-  console.log('Creating additional roles...');
-  const operatorRole = await prisma.role.upsert({
-    where: { key: 'operator' },
-    update: {
-      name: 'Operator',
-      description: 'Can manage dispatches and tracking.',
-      isActive: true,
-    },
-    create: {
-      key: 'operator',
-      name: 'Operator',
-      description: 'Can manage dispatches and tracking.',
-      isActive: true,
-    },
-  });
-
-  const viewerRole = await prisma.role.upsert({
-    where: { key: 'viewer' },
-    update: {
-      name: 'Viewer',
-      description: 'Read-only access to data.',
-      isActive: true,
-    },
-    create: {
-      key: 'viewer',
-      name: 'Viewer',
-      description: 'Read-only access to data.',
-      isActive: true,
-    },
-  });
-
-  // Hash admin password
-  console.log('Creating admin user with hashed password...');
+  // ============================================
+  // STEP 2: Create Tenants and Their Data
+  // ============================================
   const passwordHash = await bcrypt.hash(DEFAULT_ADMIN_PASSWORD, SALT_ROUNDS);
 
-  const adminUser = await prisma.user.upsert({
-    where: { email: 'admin@tracker.local' },
-    update: {
-      name: 'Admin Inicial',
-      passwordHash,
-      isActive: true,
-    },
-    create: {
-      email: 'admin@tracker.local',
-      name: 'Admin Inicial',
-      passwordHash,
-      isActive: true,
-    },
-  });
+  for (const tenantConfig of tenants) {
+    console.log(
+      `🏢 Setting up tenant: ${tenantConfig.name} (${tenantConfig.slug})`,
+    );
 
-  // Assign all permissions to admin role
-  console.log('Assigning permissions to admin role...');
-  for (const permission of permissions) {
-    const permissionRecord = await prisma.permission.findUniqueOrThrow({
-      where: { key: permission.key },
+    // Create Tenant
+    const tenant = await prisma.tenant.upsert({
+      where: { slug: tenantConfig.slug },
+      update: {
+        name: tenantConfig.name,
+        email: tenantConfig.email,
+        isActive: true,
+      },
+      create: {
+        name: tenantConfig.name,
+        slug: tenantConfig.slug,
+        email: tenantConfig.email,
+        isActive: true,
+      },
     });
+    console.log(`  ✓ Tenant created: ${tenant.id}`);
 
-    await prisma.rolePermission.upsert({
+    // Create Roles for this Tenant
+    console.log('  📝 Creating roles...');
+    const createdRoles: Record<string, any> = {};
+
+    for (const roleTemplate of roleTemplates) {
+      const role = await prisma.role.upsert({
+        where: {
+          tenantId_key: {
+            tenantId: tenant.id,
+            key: roleTemplate.key,
+          },
+        },
+        update: {
+          name: roleTemplate.name,
+          description: roleTemplate.description,
+          isActive: true,
+        },
+        create: {
+          tenantId: tenant.id,
+          key: roleTemplate.key,
+          name: roleTemplate.name,
+          description: roleTemplate.description,
+          isActive: true,
+        },
+      });
+      createdRoles[roleTemplate.key] = role;
+      console.log(`    ✓ Role: ${role.name} (${role.key})`);
+
+      // Assign Permissions to Role
+      for (const permKey of roleTemplate.permissions) {
+        const permission = await prisma.permission.findUnique({
+          where: { key: permKey },
+        });
+
+        if (permission) {
+          await prisma.rolePermission.upsert({
+            where: {
+              roleId_permissionId: {
+                roleId: role.id,
+                permissionId: permission.id,
+              },
+            },
+            update: {},
+            create: {
+              tenantId: tenant.id,
+              roleId: role.id,
+              permissionId: permission.id,
+            },
+          });
+        }
+      }
+    }
+    console.log(`  ✅ Created ${Object.keys(createdRoles).length} roles`);
+
+    // Create Admin User for this Tenant
+    console.log('  👤 Creating admin user...');
+    const adminUser = await prisma.user.upsert({
       where: {
-        roleId_permissionId: {
+        tenantId_email: {
+          tenantId: tenant.id,
+          email: tenantConfig.adminUser.email,
+        },
+      },
+      update: {
+        name: tenantConfig.adminUser.name,
+        passwordHash,
+        isActive: true,
+      },
+      create: {
+        tenantId: tenant.id,
+        email: tenantConfig.adminUser.email,
+        name: tenantConfig.adminUser.name,
+        passwordHash,
+        isActive: true,
+      },
+    });
+    console.log(`    ✓ User: ${adminUser.email}`);
+
+    // Assign Admin Role to Admin User
+    const adminRole = createdRoles['admin'];
+    await prisma.userRole.upsert({
+      where: {
+        userId_roleId: {
+          userId: adminUser.id,
           roleId: adminRole.id,
-          permissionId: permissionRecord.id,
         },
       },
       update: {},
       create: {
-        roleId: adminRole.id,
-        permissionId: permissionRecord.id,
-      },
-    });
-  }
-
-  // Assign read permissions to operator role
-  const operatorPermissions = [
-    'dispatches.read',
-    'dispatches.write',
-    'tracking.read',
-    'tracking.write',
-  ];
-  for (const permKey of operatorPermissions) {
-    const permissionRecord = await prisma.permission.findUnique({
-      where: { key: permKey },
-    });
-    if (permissionRecord) {
-      await prisma.rolePermission.upsert({
-        where: {
-          roleId_permissionId: {
-            roleId: operatorRole.id,
-            permissionId: permissionRecord.id,
-          },
-        },
-        update: {},
-        create: {
-          roleId: operatorRole.id,
-          permissionId: permissionRecord.id,
-        },
-      });
-    }
-  }
-
-  // Assign read-only permissions to viewer role
-  const viewerPermissions = [
-    'dispatches.read',
-    'tracking.read',
-    'reports.read',
-  ];
-  for (const permKey of viewerPermissions) {
-    const permissionRecord = await prisma.permission.findUnique({
-      where: { key: permKey },
-    });
-    if (permissionRecord) {
-      await prisma.rolePermission.upsert({
-        where: {
-          roleId_permissionId: {
-            roleId: viewerRole.id,
-            permissionId: permissionRecord.id,
-          },
-        },
-        update: {},
-        create: {
-          roleId: viewerRole.id,
-          permissionId: permissionRecord.id,
-        },
-      });
-    }
-  }
-
-  // Assign admin role to admin user
-  console.log('Assigning admin role to admin user...');
-  await prisma.userRole.upsert({
-    where: {
-      userId_roleId: {
+        tenantId: tenant.id,
         userId: adminUser.id,
         roleId: adminRole.id,
       },
-    },
-    update: {},
-    create: {
-      userId: adminUser.id,
-      roleId: adminRole.id,
-    },
-  });
+    });
+    console.log(`    ✓ Assigned admin role to user`);
+    console.log('  ✅ Admin user created and configured\n');
+  }
 
-  console.log('');
-  console.log('Seed completed successfully!');
-  console.log('');
-  console.log('Default admin credentials:');
-  console.log('  Email: admin@tracker.local');
-  console.log('  Password: admin123');
-  console.log('');
-  console.log('IMPORTANT: Change the admin password in production!');
+  // ============================================
+  // SUMMARY
+  // ============================================
+  console.log('═══════════════════════════════════════════════════════════');
+  console.log('🎉 Seed completed successfully!\n');
+  console.log('📊 Summary:');
+  console.log(`  • ${permissions.length} global permissions created`);
+  console.log(`  • ${tenants.length} tenants created`);
+  console.log(
+    `  • ${roleTemplates.length} roles per tenant (${tenants.length * roleTemplates.length} total)`,
+  );
+  console.log(`  • ${tenants.length} admin users created\n`);
+
+  console.log('🔐 Default Admin Credentials:\n');
+  for (const tenant of tenants) {
+    console.log(`  ${tenant.name} (slug: ${tenant.slug})`);
+    console.log(`    Email: ${tenant.adminUser.email}`);
+    console.log(`    Password: ${DEFAULT_ADMIN_PASSWORD}`);
+    console.log('');
+  }
+
+  console.log('⚠️  IMPORTANT: Change all admin passwords in production!');
+  console.log('═══════════════════════════════════════════════════════════\n');
 }
 
 main()
@@ -271,7 +328,7 @@ main()
     await prisma.$disconnect();
   })
   .catch(async (error) => {
-    console.error('Seed failed:', error);
+    console.error('❌ Seed failed:', error);
     await prisma.$disconnect();
     process.exit(1);
   });
